@@ -1,0 +1,15 @@
+{
+  "name": "finance-finder",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "build:shared": "npm run build -w @ff/shared",
+    "dev:api": "npm run build:shared && npm run start:dev -w @ff/api",
+    "dev:desktop": "npm run build:shared && npm run dev -w @ff/desktop",
+    "build": "npm run build:shared && npm run build -w @ff/api && npm run build -w @ff/desktop",
+    "typecheck": "npm run build:shared && npm run typecheck -w @ff/api && npm run typecheck -w @ff/desktop",
+    "db:up": "docker compose up -d db"
+  },
+  "engines": { "node": ">=22" }
+}
