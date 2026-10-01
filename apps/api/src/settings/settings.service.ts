@@ -27,6 +27,8 @@ export const DEFAULT_APP_SETTINGS: AppSettingsDto = {
   positionReviewHours: 6,
   minMentionsForSignal: 8,
   riskProfile: 'BALANCED',
+  minSharePrice: null,
+  maxSharePrice: null,
 };
 
 export interface ResolvedProvider {

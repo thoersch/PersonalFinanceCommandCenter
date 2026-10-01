@@ -14,8 +14,13 @@ const AppSettingsPatch = z
     positionReviewHours: z.number().min(1).max(24 * 14),
     minMentionsForSignal: z.number().int().min(1).max(10_000),
     riskProfile: z.enum(['CONSERVATIVE', 'BALANCED', 'AGGRESSIVE']),
+    minSharePrice: z.number().positive().nullable(),
+    maxSharePrice: z.number().positive().nullable(),
   })
-  .partial();
+  .partial()
+  .refine((v) => v.minSharePrice == null || v.maxSharePrice == null || v.minSharePrice <= v.maxSharePrice, {
+    message: 'Min share price must be at or below max share price',
+  });
 
 const ProviderPatch = z.object({
   enabled: z.boolean().optional(),

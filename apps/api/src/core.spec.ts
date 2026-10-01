@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractTickers } from './ingest/ticker-extractor';
-import { computeSignal, effectivePriority } from './signals/signals.service';
+import { computeSignal, effectivePriority, inPriceBand } from './signals/signals.service';
 import { extractJson } from './ai/ai.service';
 import { decrypt, encrypt, preview } from './common/crypto';
 
@@ -62,4 +62,16 @@ test('crypto round-trips and previews', () => {
   assert.notEqual(enc, 'sk-secret-12345678');
   assert.equal(decrypt(enc), 'sk-secret-12345678');
   assert.equal(preview('sk-secret-12345678'), 'sk-s…5678');
+});
+
+test('inPriceBand: bounds are inclusive, null bounds and unknown prices pass', () => {
+  const band = { minSharePrice: 1, maxSharePrice: 10 };
+  assert.equal(inPriceBand(5, band), true);
+  assert.equal(inPriceBand(1, band), true);
+  assert.equal(inPriceBand(10, band), true);
+  assert.equal(inPriceBand(0.5, band), false);
+  assert.equal(inPriceBand(12, band), false);
+  assert.equal(inPriceBand(null, band), true);
+  assert.equal(inPriceBand(500, { minSharePrice: null, maxSharePrice: null }), true);
+  assert.equal(inPriceBand(500, { minSharePrice: null, maxSharePrice: 20 }), false);
 });

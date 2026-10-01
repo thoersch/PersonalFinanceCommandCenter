@@ -1,15 +1,18 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Stage } from '@ff/shared';
-import { useMutations, useOpportunities } from '../lib/api';
+import { useAppSettings, useMutations, useOpportunities } from '../lib/api';
 import { ago, growthLabel, money, pct, tone } from '../lib/format';
-import { Icon, PrioritySelect, QueryState, ScoreBar, Seg, Sparkline, StageChip, useToast } from '../components/ui';
+import { Icon, PrioritySelect, QueryState, ScoreBar, Seg, Sparkline, StageChip, Toggle, useToast } from '../components/ui';
 
 export function Opportunities() {
   const [stage, setStage] = useState<Stage | ''>('');
   const [q, setQ] = useState('');
   const [add, setAdd] = useState('');
-  const opps = useOpportunities({ stage, q });
+  const [bandOnly, setBandOnly] = useState(true);
+  const app = useAppSettings().data;
+  const band = app ? priceBandLabel(app.minSharePrice, app.maxSharePrice) : null;
+  const opps = useOpportunities({ stage, q, inPriceBand: !!band && bandOnly });
   const { setOppPriority, patchOpp, track } = useMutations();
   const nav = useNavigate();
   const toast = useToast();
@@ -52,6 +55,12 @@ export function Opportunities() {
             Filter by ticker
           </label>
           <input id="oq" className="input" type="search" placeholder="Filter by ticker…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 220 }} />
+          {band && (
+            <div className="row-flex" style={{ gap: 8, fontSize: 12 }}>
+              <Toggle label={`Only ${band}`} checked={bandOnly} onChange={setBandOnly} />
+              <span className="muted">Only {band}</span>
+            </div>
+          )}
           <div className="grow" />
           <Seg
             label="Stage filter"
@@ -150,4 +159,11 @@ export function Opportunities() {
       </section>
     </main>
   );
+}
+
+function priceBandLabel(lo: number | null, hi: number | null): string | null {
+  if (lo !== null && hi !== null) return `${money(lo)}–${money(hi)}`;
+  if (hi !== null) return `under ${money(hi)}`;
+  if (lo !== null) return `over ${money(lo)}`;
+  return null;
 }

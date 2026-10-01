@@ -21,12 +21,19 @@ export class OpportunitiesController {
   ) {}
 
   @Get()
-  list(@Query('stage') stage?: string, @Query('q') q?: string, @Query('includeDismissed') inc?: string, @Query('limit') limit?: string) {
+  list(
+    @Query('stage') stage?: string,
+    @Query('q') q?: string,
+    @Query('includeDismissed') inc?: string,
+    @Query('limit') limit?: string,
+    @Query('inPriceBand') band?: string,
+  ) {
     return this.opps.list({
       stage: STAGES.includes(stage as Stage) ? (stage as Stage) : undefined,
       q: q || undefined,
       includeDismissed: inc === 'true',
       limit: Number(limit) || undefined,
+      inPriceBand: band === 'true',
     });
   }
 

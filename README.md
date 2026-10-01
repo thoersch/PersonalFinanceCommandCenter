@@ -14,7 +14,7 @@ packages/
 
 ## How it works
 
-1. **Ingest** – each enabled source runs on its own interval: Reddit (official API, subreddits you choose, posts + top comments on busy threads), StockTwits trending, market data (Polygon / Finnhub / Alpha Vantage), news (Finnhub / NewsAPI) and SEC EDGAR filings (8-K, Form 4 insider trades, 10-Q…). Tickers are extracted from text and validated against SEC's list of ~10k US-listed symbols, with a stop-list for words like `ALL`, `CEO`, `YOLO`.
+1. **Ingest** – each enabled source runs on its own interval: Reddit (via FetchLayer, subreddits you choose, posts + top comments on busy threads), StockTwits trending, market data (Polygon / Finnhub / Alpha Vantage), news (Finnhub / NewsAPI) and SEC EDGAR filings (8-K, Form 4 insider trades, 10-Q…). Tickers are extracted from text and validated against SEC's list of ~10k US-listed symbols, with a stop-list for words like `ALL`, `CEO`, `YOLO`.
 2. **Sweep** (default every 30 min) – mentions roll up into a daily per-ticker dataset. For each ticker the API computes mention growth vs. its 30-day baseline, acceleration, unique authors, community spread and news coverage, which give a **saturation** score and a **stage**: *Emerging → Accelerating → Crowded → Fading*.
 3. **Research** – the sweep queues work in a Postgres-backed job queue, ordered by priority (your overrides win):
    - **Sentiment** (Fast model): labels posts bullish/bearish and DD / hype / promo.
@@ -84,7 +84,7 @@ Installers land in `apps/desktop/release/`. For distribution beyond your own mac
 
 ## Getting data-source credentials
 
-- **Reddit** – create a *script* app at reddit.com/prefs/apps; paste the client ID, secret and a descriptive user agent (`finance-finder/0.1 by u/yourname`). Review Reddit's Data API terms for your use.
+- **Reddit** – sign up at [fetchlayer.dev](https://fetchlayer.dev) and paste your API key (`ss-…`). No Reddit OAuth app is needed. FetchLayer bills per page scraped (25 posts per page), so trim subreddits, `postsPerSub` or the polling interval if credits run low.
 - **SEC EDGAR** – free, just needs a user agent with a contact email. Keep requests under 10/second (the app does).
 - **Polygon / Finnhub / Alpha Vantage / NewsAPI** – free tiers work for a personal watchlist; the first enabled market source with a key (Polygon → Finnhub → Alpha Vantage) does the price syncing.
 

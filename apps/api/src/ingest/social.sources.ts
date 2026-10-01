@@ -8,38 +8,24 @@ export interface RunResult {
   cursor?: Record<string, unknown>;
 }
 
+/** Reddit via FetchLayer (https://fetchlayer.dev/documentation/reddit) — no Reddit OAuth app needed. */
 @Injectable()
 export class RedditSource {
   private readonly logger = new Logger(RedditSource.name);
-  private token: { value: string; expires: number; clientId: string } | null = null;
 
   constructor(private readonly store: PostStoreService) {}
 
-  private async auth(src: ResolvedSource): Promise<string> {
-    const { clientId, clientSecret, userAgent } = src.credentials;
-    if (!clientId || !clientSecret || !userAgent) {
-      throw new ConfigError('Reddit needs a client ID, client secret and user agent. Create a "script" app at reddit.com/prefs/apps.');
-    }
-    if (this.token && this.token.clientId === clientId && this.token.expires > Date.now() + 60_000) return this.token.value;
-    const res = await fetchJson<{ access_token: string; expires_in: number }>('https://www.reddit.com/api/v1/access_token', {
+  private async call<T>(src: ResolvedSource, endpoint: string, body: Record<string, unknown>): Promise<T> {
+    const { apiKey } = src.credentials;
+    if (!apiKey) throw new ConfigError('Reddit needs a FetchLayer API key. Get one at fetchlayer.dev.');
+    const res = await fetchJson<any>(`https://api.fetchlayer.dev/reddit/${endpoint}`, {
       method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': userAgent,
-      },
-      body: 'grant_type=client_credentials',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      timeoutMs: 60_000, // FetchLayer scrapes with a 45s budget
     });
-    this.token = { value: res.access_token, expires: Date.now() + res.expires_in * 1000, clientId };
-    return res.access_token;
-  }
-
-  private async get<T>(src: ResolvedSource, path: string): Promise<T> {
-    const token = await this.auth(src);
-    await sleep(700); // stay well under Reddit's 100 req/min
-    return fetchJson<T>(`https://oauth.reddit.com${path}`, {
-      headers: { Authorization: `Bearer ${token}`, 'User-Agent': src.credentials.userAgent },
-    });
+    if (res?.blocked) throw new Error(`Reddit blocked the request (${res.blockReason ?? 'unknown reason'})`);
+    return res as T;
   }
 
   async run(src: ResolvedSource): Promise<RunResult> {
@@ -50,31 +36,31 @@ export class RedditSource {
     let mentionCount = 0;
     const errors: string[] = [];
     if (!subs.length) throw new ConfigError('No subreddits selected');
-    await this.auth(src); // fail fast on bad credentials
+    if (!src.credentials.apiKey) throw new ConfigError('Reddit needs a FetchLayer API key. Get one at fetchlayer.dev.');
 
     for (const sub of subs) {
       try {
         const listings = await Promise.all([
-          this.get<any>(src, `/r/${encodeURIComponent(sub)}/new?limit=${limit}&raw_json=1`),
-          this.get<any>(src, `/r/${encodeURIComponent(sub)}/hot?limit=25&raw_json=1`),
+          this.call<any>(src, 'community-posts', { subreddit: sub, sort: 'new', limit }),
+          this.call<any>(src, 'community-posts', { subreddit: sub, sort: 'hot', limit: 25, pages: 1 }),
         ]);
         const seen = new Set<string>();
         const items: IncomingPost[] = [];
         for (const listing of listings) {
-          for (const { data: p } of listing?.data?.children ?? []) {
-            if (seen.has(p.id) || p.stickied) continue;
+          for (const p of listing?.items ?? []) {
+            if (!p.id || seen.has(p.id) || p.stickied) continue;
             seen.add(p.id);
             items.push({
               sourceId: 'reddit',
-              externalId: p.name,
-              channel: `r/${p.subreddit}`,
+              externalId: p.fullname ?? `t3_${p.id}`,
+              channel: p.subredditPrefixed ?? `r/${p.subreddit ?? sub}`,
               author: p.author,
               title: p.title,
-              body: p.selftext,
-              url: `https://www.reddit.com${p.permalink}`,
+              body: p.previewText,
+              url: p.permalink,
               score: p.score ?? 0,
-              numComments: p.num_comments ?? 0,
-              postedAt: new Date(p.created_utc * 1000),
+              numComments: p.commentCount ?? 0,
+              postedAt: p.createdAt ? new Date(p.createdAt) : new Date(),
             });
           }
         }
@@ -84,30 +70,28 @@ export class RedditSource {
 
         // Comments on the busiest ticker-bearing posts — that's where DD gets challenged or amplified.
         const busy = items
-          .filter((i) => (r.tickersByExt.get(i.externalId)?.length ?? 0) > 0 && i.numComments >= 10)
+          .filter((i) => (r.tickersByExt.get(i.externalId)?.length ?? 0) > 0 && i.numComments >= 10 && i.url)
           .sort((a, b) => b.numComments - a.numComments)
           .slice(0, 8);
         for (const post of busy) {
-          const id = post.externalId.replace(/^t3_/, '');
-          const thread = await this.get<any[]>(
-            src,
-            `/r/${encodeURIComponent(sub)}/comments/${id}?limit=${commentsPerPost}&depth=1&sort=top&raw_json=1`,
-          );
-          const comments: IncomingPost[] = (thread?.[1]?.data?.children ?? [])
-            .filter((c: any) => c.kind === 't1' && c.data?.body)
+          const thread = await this.call<any>(src, 'post', { url: post.url, pages: 1, depth: 1 });
+          const comments: IncomingPost[] = (thread?.comments ?? [])
+            .filter((c: any) => c.bodyText && c.id && !c.stickied)
+            .sort((a: any, b: any) => (b.score ?? 0) - (a.score ?? 0))
+            .slice(0, commentsPerPost)
             .map((c: any) => ({
               sourceId: 'reddit',
-              externalId: c.data.name,
+              externalId: c.fullname ?? `t1_${c.id}`,
               channel: post.channel,
-              author: c.data.author,
+              author: c.author,
               title: null,
-              body: c.data.body,
-              url: `https://www.reddit.com${c.data.permalink}`,
-              score: c.data.score ?? 0,
+              body: c.bodyText,
+              url: c.permalink,
+              score: c.score ?? 0,
               numComments: 0,
               isComment: true,
               parentExternalId: post.externalId,
-              postedAt: new Date(c.data.created_utc * 1000),
+              postedAt: c.createdAt ? new Date(c.createdAt) : post.postedAt,
               inheritTickers: r.tickersByExt.get(post.externalId),
             }));
           const rc = await this.store.save(comments);

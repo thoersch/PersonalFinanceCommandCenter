@@ -245,4 +245,7 @@ export interface AppSettingsDto {
   positionReviewHours: number;
   minMentionsForSignal: number;
   riskProfile: 'CONSERVATIVE' | 'BALANCED' | 'AGGRESSIVE';
+  /** Share-price band to focus on; null = no bound. Tickers outside it aren't auto-researched. */
+  minSharePrice: number | null;
+  maxSharePrice: number | null;
 }

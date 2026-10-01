@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { AppSettingsDto } from '@ff/shared';
 import { and, asc, desc, eq, gte, isNull, sql } from 'drizzle-orm';
 import { Db, InjectDb } from '../db/db.module';
 import { advice, analyses, filings, newsItems, opportunities, positions, posts, tickerDaily } from '../db/schema';
@@ -152,7 +153,7 @@ export class ResearchService {
       : 'No previous analysis.';
 
     const prompt = `TICKER: ${ticker} — ${info?.name ?? 'unknown name'} (${info?.exchange ?? 'exchange unknown'})
-User risk profile: ${app.riskProfile}
+User risk profile: ${app.riskProfile}${priceFocus(app)}
 Current price: ${quote ? `$${quote.price}${quote.prevClose ? ` (prev close $${quote.prevClose})` : ''}` : 'unavailable'}
 Price when first flagged: ${opp.flagPrice ?? 'n/a'} on ${opp.firstFlaggedAt.toISOString().slice(0, 10)}
 
@@ -327,4 +328,15 @@ PREVIOUS ADVICE: ${lastAdvice ? `${lastAdvice.action} (${lastAdvice.createdAt.to
     await this.db.update(positions).set({ lastReviewedAt: new Date() }).where(eq(positions.id, pos.id));
     return { message: `${pos.ticker}: ${r.data.action} (${Math.round(r.data.confidence * 100)}% confidence)`, provider: r.provider, model: r.model, costUsd: r.costUsd };
   }
+}
+
+/** Prompt line describing the user's share-price focus, if they set one. */
+function priceFocus(app: AppSettingsDto): string {
+  const { minSharePrice: lo, maxSharePrice: hi } = app;
+  if (lo === null && hi === null) return '';
+  const band = lo !== null && hi !== null ? `$${lo}–$${hi}` : hi !== null ? `under $${hi}` : `over $${lo}`;
+  return `
+User focus: shares priced ${band}, looking for the highest upside potential at that price. Reward a concrete path to a
+re-rating (catalyst, small float or market cap relative to the opportunity). A low share price is not low risk: penalize
+dilution, going-concern warnings, reverse-split or delisting risk, and thin liquidity.`;
 }

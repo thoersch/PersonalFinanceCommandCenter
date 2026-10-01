@@ -43,6 +43,14 @@ export function autoPriority(strength: number, score: number | null, saturation:
   return stage === 'FADING' ? base * 0.5 : base;
 }
 
+/** True when the price is inside the user's share-price band. Unknown prices pass — we can't judge them yet. */
+export function inPriceBand(price: number | null, band: { minSharePrice: number | null; maxSharePrice: number | null }) {
+  if (price === null) return true;
+  if (band.minSharePrice !== null && price < band.minSharePrice) return false;
+  if (band.maxSharePrice !== null && price > band.maxSharePrice) return false;
+  return true;
+}
+
 export function effectivePriority(auto: number, override: Priority | null | string): number {
   switch (override) {
     case 'PINNED':

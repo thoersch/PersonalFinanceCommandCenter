@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, gte, ilike, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import {
   AnalysisDto,
   DailyPoint,
@@ -14,6 +14,7 @@ import { Db, InjectDb } from '../db/db.module';
 import { analyses, filings, newsItems, opportunities, positions, posts, tickerDaily } from '../db/schema';
 import { dayKey, daysAgo } from '../common/http';
 import { TickersService } from '../ingest/tickers.service';
+import { SettingsService } from '../settings/settings.service';
 import { effectivePriority } from '../signals/signals.service';
 
 type OppRow = typeof opportunities.$inferSelect;
@@ -41,13 +42,25 @@ export class OpportunitiesService {
   constructor(
     @InjectDb() private readonly db: Db,
     private readonly tickers: TickersService,
+    private readonly settings: SettingsService,
   ) {}
 
-  async list(o: { stage?: Stage; q?: string; includeDismissed?: boolean; limit?: number }): Promise<OpportunityListItem[]> {
+  /** Unknown prices stay visible — the next market-data sync or deep dive fills them in. */
+  private async priceBandWhere() {
+    const { minSharePrice: lo, maxSharePrice: hi } = await this.settings.getApp();
+    if (lo === null && hi === null) return undefined;
+    return or(
+      isNull(opportunities.price),
+      and(lo !== null ? gte(opportunities.price, lo) : undefined, hi !== null ? lte(opportunities.price, hi) : undefined),
+    );
+  }
+
+  async list(o: { stage?: Stage; q?: string; includeDismissed?: boolean; limit?: number; inPriceBand?: boolean }): Promise<OpportunityListItem[]> {
     const where = and(
       o.includeDismissed ? undefined : eq(opportunities.dismissed, false),
       o.stage ? eq(opportunities.stage, o.stage) : undefined,
       o.q ? ilike(opportunities.ticker, `${o.q.toUpperCase()}%`) : undefined,
+      o.inPriceBand ? await this.priceBandWhere() : undefined,
     );
     const rows = await this.db.select().from(opportunities).where(where).orderBy(desc(opportunities.autoPriority)).limit(500);
     const items = await this.toListItems(rows);

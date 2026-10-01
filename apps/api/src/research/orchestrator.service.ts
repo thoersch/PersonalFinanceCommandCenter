@@ -7,7 +7,7 @@ import { AiService, BudgetExceededError, RoleNotConfiguredError } from '../ai/ai
 import { ConfigError } from '../common/http';
 import { IngestService } from '../ingest/ingest.service';
 import { SettingsService } from '../settings/settings.service';
-import { effectivePriority, SignalsService } from '../signals/signals.service';
+import { effectivePriority, inPriceBand, SignalsService } from '../signals/signals.service';
 import { JobsService, LANES } from './jobs.service';
 import { OutcomesService } from './outcomes.service';
 import { HandlerResult, ResearchService } from './research.service';
@@ -162,6 +162,7 @@ export class OrchestratorService implements OnApplicationBootstrap, OnApplicatio
         .orderBy(desc(opportunities.autoPriority))
         .limit(200);
       const picked = candidates
+        .filter((c) => c.priorityOverride === 'PINNED' || inPriceBand(c.price, app))
         .map((c) => ({ c, p: effectivePriority(c.autoPriority, c.priorityOverride) }))
         .sort((a, b) => b.p - a.p)
         .slice(0, app.maxDeepDivesPerSweep);

@@ -94,13 +94,14 @@ export const useActivity = () => useQuery({ queryKey: ['activity'], queryFn: () 
 export const useAlerts = () => useQuery({ queryKey: ['alerts'], queryFn: () => api<PositionAlert[]>('/dashboard/alerts'), refetchInterval: LIVE });
 export const useHeatmap = () => useQuery({ queryKey: ['heatmap'], queryFn: () => api<HeatmapDto>('/dashboard/heatmap'), refetchInterval: 60_000 });
 
-export const useOpportunities = (f: { stage?: Stage | ''; q?: string } = {}) =>
+export const useOpportunities = (f: { stage?: Stage | ''; q?: string; inPriceBand?: boolean } = {}) =>
   useQuery({
     queryKey: ['opportunities', f],
     queryFn: () => {
       const p = new URLSearchParams();
       if (f.stage) p.set('stage', f.stage);
       if (f.q) p.set('q', f.q);
+      if (f.inPriceBand) p.set('inPriceBand', 'true');
       return api<OpportunityListItem[]>(`/opportunities?${p}`);
     },
     refetchInterval: LIVE,
@@ -170,6 +171,6 @@ export function useMutations() {
       return api(`/settings/sources/${id}`, { method: 'PATCH', body: body(rest) });
     }, ['sources']),
     runSource: m((id: string) => api(`/sources/${id}/run`, { method: 'POST' }), ['sources', 'jobs', 'activity']),
-    updateApp: m((a: Partial<AppSettingsDto>) => api('/settings/app', { method: 'PUT', body: body(a) }), ['app-settings', 'summary']),
+    updateApp: m((a: Partial<AppSettingsDto>) => api('/settings/app', { method: 'PUT', body: body(a) }), ['app-settings', 'summary', 'opportunities']),
   };
 }

@@ -417,6 +417,24 @@ function AutomationTab() {
       </span>
     </label>
   );
+  const priceBound = (k: 'minSharePrice' | 'maxSharePrice', label: string, hint: string) => (
+    <label className="field">
+      {label}
+      <input
+        className="input mono"
+        type="number"
+        step={0.5}
+        min={0}
+        placeholder="Any"
+        value={v[k] ?? ''}
+        onChange={(e) => setV({ ...v, [k]: e.target.value === '' || Number(e.target.value) <= 0 ? null : Number(e.target.value) })}
+      />
+      <span className="faint" style={{ fontSize: 11 }}>
+        {hint}
+      </span>
+    </label>
+  );
+  const bandInvalid = v.minSharePrice !== null && v.maxSharePrice !== null && v.minSharePrice > v.maxSharePrice;
   return (
     <section className="panel panel-pad" style={{ maxWidth: 820, display: 'flex', flexDirection: 'column', gap: 18 }}>
       <div className="row-flex">
@@ -435,7 +453,10 @@ function AutomationTab() {
         {num('deepDiveStaleHours', 'Refresh research after (h)', 'Emerging names refresh twice as often')}
         {num('positionReviewHours', 'Review positions every (h)', 'Hold/sell advice cadence')}
         {num('minMentionsForSignal', 'Min. weekly mentions', 'Threshold to become a signal')}
+        {priceBound('minSharePrice', 'Min. share price ($)', 'Blank = no floor. ~$1 skips most delisting candidates')}
+        {priceBound('maxSharePrice', 'Max. share price ($)', 'Blank = no cap. Focus research on cheaper shares')}
       </div>
+      {bandInvalid && <div className="error">Min. share price must be at or below the max.</div>}
       <label className="field" style={{ maxWidth: 320 }}>
         Risk profile
         <select className="select input" value={v.riskProfile} onChange={(e) => setV({ ...v, riskProfile: e.target.value as AppSettingsDto['riskProfile'] })}>
@@ -449,7 +470,7 @@ function AutomationTab() {
       </label>
       <div className="row-flex">
         <div className="grow" />
-        <button className="btn primary" type="button" disabled={JSON.stringify(v) === JSON.stringify(q.data)} onClick={() => updateApp.mutate(v, { onSuccess: () => toast('Automation settings saved') })}>
+        <button className="btn primary" type="button" disabled={bandInvalid || JSON.stringify(v) === JSON.stringify(q.data)} onClick={() => updateApp.mutate(v, { onSuccess: () => toast('Automation settings saved') })}>
           Save changes
         </button>
       </div>
